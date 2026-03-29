@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新聞可信度檢測器</title>
+<style>
+:root {
+  --bg: #0f172a; --surface: #1e293b; --card: #334155;
+  --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+  --green: #22c55e; --yellow: #eab308; --orange: #f97316; --red: #ef4444;
+  --border: #475569;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh;
+}
+.container { max-width: 800px; margin: 0 auto; padding: 24px 16px; }
+h1 { font-size: 1.75rem; text-align: center; margin-bottom: 8px; }
+h1 span { color: var(--accent); }
+.subtitle { text-align: center; color: var(--muted); margin-bottom: 32px; font-size: 0.9rem; }
+
+/* Input area */
+.input-section {
+  background: var(--surface); border-radius: 12px; padding: 24px;
+  border: 1px solid var(--border); margin-bottom: 24px;
+}
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tab {
+  padding: 8px 20px; border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); cursor: pointer; font-size: 0.9rem;
+  transition: all 0.2s;
+}
+.tab.active { background: var(--accent); color: #0f172a; border-color: var(--accent); font-weight: 600; }
+textarea, input[type="text"] {
+  width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); font-size: 1rem; resize: vertical;
+  font-family: inherit;
+}
+textarea { min-height: 120px; }
+textarea:focus, input:focus { outline: none; border-color: var(--accent); }
+.hidden { display: none; }
+.btn {
+  display: block; width: 100%; padding: 14px; border: none; border-radius: 8px;
+  background: var(--accent); color: #0f172a; font-size: 1.05rem; font-weight: 700;
+  cursor: pointer; margin-top: 16px; transition: opacity 0.2s;
+}
+.btn:hover { opacity: 0.9; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Result area */
+.result-section { display: none; }
+.result-section.show { display: block; }
+
+/* Score ring */
+.score-card {
+  background: var(--surface); border-radius: 12px; padding: 24px;
+  border: 1px solid var(--border); text-align: center; margin-bottom: 16px;
+}
+.score-ring {
+  width: 140px; height: 140px; margin: 0 auto 12px; position: relative;
+}
+.score-ring svg { transform: rotate(-90deg); }
+.score-ring circle {
+  fill: none; stroke-width: 10; cx: 70; cy: 70; r: 60;
+}
+.score-ring .bg { stroke: var(--card); }
+.score-ring .fg { stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+.score-number {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 2.2rem; font-weight: 800;
+}
+.score-label { font-size: 1.2rem; font-weight: 600; margin-bottom: 4px; }
+.score-confidence { color: var(--muted); font-size: 0.85rem; }
+
+/* Sub-scores */
+.sub-scores {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  margin-bottom: 16px;
+}
+.sub-score {
+  background: var(--surface); border-radius: 10px; padding: 14px 8px;
+  text-align: center; border: 1px solid var(--border);
+}
+.sub-score .value { font-size: 1.4rem; font-weight: 700; }
+.sub-score .label { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+
+/* Details */
+.details-card {
+  background: var(--surface); border-radius: 12px; padding: 20px;
+  border: 1px solid var(--border); margin-bottom: 16px;
+}
+.details-card h3 { font-size: 1rem; margin-bottom: 12px; color: var(--accent); }
+.detail-item {
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem;
+  line-height: 1.5;
+}
+.detail-item:last-child { border-bottom: none; }
+
+/* Related articles */
+.article-item {
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.article-item:last-child { border-bottom: none; }
+.article-item a {
+  color: var(--accent); text-decoration: none; font-size: 0.9rem;
+}
+.article-item a:hover { text-decoration: underline; }
+.article-source { color: var(--muted); font-size: 0.8rem; }
+
+/* Financial badge */
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.75rem; font-weight: 600; margin-left: 8px;
+}
+.badge-financial { background: #1e3a5f; color: var(--accent); }
+
+/* Loading */
+.loading { text-align: center; padding: 40px; color: var(--muted); }
+.spinner {
+  width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .sub-scores { grid-template-columns: repeat(2, 1fr); }
+  h1 { font-size: 1.3rem; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔍 新聞<span>可信度</span>檢測器</h1>
+  <p class="subtitle">五層分析引擎 — 貼入新聞文字或網址，即時評估可信度</p>
+
+  <div class="input-section">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('text')">📝 貼上文字</button>
+      <button class="tab" onclick="switchTab('url')">🔗 輸入網址</button>
+    </div>
+    <div id="tab-text">
+      <textarea id="input-text" placeholder="將新聞內容、LINE 訊息、社群貼文貼在這裡..."></textarea>
+    </div>
+    <div id="tab-url" class="hidden">
+      <input type="text" id="input-url" placeholder="https://example.com/news/article">
+    </div>
+    <button class="btn" id="btn-check" onclick="checkNews()">開始檢測</button>
+  </div>
+
+  <div class="result-section" id="result">
+    <div class="score-card">
+      <div class="score-ring">
+        <svg width="140" height="140">
+          <circle class="bg" r="60" cx="70" cy="70"></circle>
+          <circle class="fg" id="score-circle" r="60" cx="70" cy="70"
+            stroke-dasharray="377" stroke-dashoffset="377"></circle>
+        </svg>
+        <div class="score-number" id="score-number">--</div>
+      </div>
+      <div class="score-label" id="score-label">分析中...</div>
+      <div class="score-confidence" id="score-confidence"></div>
+    </div>
+
+    <div class="sub-scores">
+      <div class="sub-score">
+        <div class="value" id="ss-source">--</div>
+        <div class="label">來源可信度</div>
+      </div>
+      <div class="sub-score">
+        <div class="value" id="ss-factcheck">--</div>
+        <div class="label">事實查核</div>
+      </div>
+      <div class="sub-score">
+        <div class="value" id="ss-content">--</div>
+        <div class="label">內容品質</div>
+      </div>
+      <div class="sub-score">
+        <div class="value" id="ss-crossref">--</div>
+        <div class="label">交叉驗證</div>
+      </div>
+    </div>
+
+    <div class="details-card">
+      <h3>📋 分析詳情</h3>
+      <div id="details-list"></div>
+    </div>
+
+    <div class="details-card" id="factcheck-section" style="display:none">
+      <h3>🔎 相關事實查核</h3>
+      <div id="factcheck-list"></div>
+    </div>
+
+    <div class="details-card" id="related-section" style="display:none">
+      <h3>📰 相關報導</h3>
+      <div id="related-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentTab = 'text';
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-text').classList.toggle('hidden', tab !== 'text');
+  document.getElementById('tab-url').classList.toggle('hidden', tab !== 'url');
+}
+
+function scoreColor(s) {
+  if (s >= 90) return '#22c55e';
+  if (s >= 70) return '#38bdf8';
+  if (s >= 50) return '#eab308';
+  if (s >= 30) return '#f97316';
+  return '#ef4444';
+}
+
+async function checkNews() {
+  const btn = document.getElementById('btn-check');
+  btn.disabled = true;
+  btn.textContent = '分析中...';
+
+  const body = {};
+  if (currentTab === 'text') {
+    body.text = document.getElementById('input-text').value.trim();
+  } else {
+    body.url = document.getElementById('input-url').value.trim();
+  }
+
+  if (!body.text && !body.url) {
+    alert('請輸入新聞文字或網址');
+    btn.disabled = false;
+    btn.textContent = '開始檢測';
+    return;
+  }
+
+  const resultEl = document.getElementById('result');
+  resultEl.classList.add('show');
+
+  // Show loading
+  document.getElementById('score-number').textContent = '...';
+  document.getElementById('score-label').textContent = '分析中，請稍候...';
+
+  try {
+    const resp = await fetch('/api/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    renderResult(data);
+  } catch (e) {
+    document.getElementById('score-label').textContent = '分析失敗：' + e.message;
+  }
+
+  btn.disabled = false;
+  btn.textContent = '開始檢測';
+}
+
+function renderResult(d) {
+  const color = scoreColor(d.score);
+  const circumference = 2 * Math.PI * 60;
+  const offset = circumference - (d.score / 100) * circumference;
+
+  // Score ring
+  const circle = document.getElementById('score-circle');
+  circle.style.stroke = color;
+  circle.setAttribute('stroke-dashoffset', offset);
+
+  document.getElementById('score-number').textContent = d.score;
+  document.getElementById('score-number').style.color = color;
+
+  let label = d.level;
+  if (d.is_financial) label += ' <span class="badge badge-financial">💰 財經</span>';
+  document.getElementById('score-label').innerHTML = label;
+  document.getElementById('score-confidence').textContent = '信心水準：' + d.confidence;
+
+  // Sub-scores
+  document.getElementById('ss-source').textContent = d.source_score;
+  document.getElementById('ss-source').style.color = scoreColor(d.source_score);
+  document.getElementById('ss-factcheck').textContent = d.factcheck_score;
+  document.getElementById('ss-factcheck').style.color = scoreColor(d.factcheck_score);
+  document.getElementById('ss-content').textContent = d.content_score;
+  document.getElementById('ss-content').style.color = scoreColor(d.content_score);
+  document.getElementById('ss-crossref').textContent = d.crossref_score;
+  document.getElementById('ss-crossref').style.color = scoreColor(d.crossref_score);
+
+  // Details
+  const detailsEl = document.getElementById('details-list');
+  detailsEl.innerHTML = d.details.map(t =>
+    '<div class="detail-item">' + t + '</div>'
+  ).join('');
+
+  // Fact checks
+  const fcSection = document.getElementById('factcheck-section');
+  const fcList = document.getElementById('factcheck-list');
+  if (d.fact_checks && d.fact_checks.length) {
+    fcSection.style.display = 'block';
+    fcList.innerHTML = d.fact_checks.map(fc =>
+      '<div class="article-item">' +
+      '<div>' + (fc.source || '') + '：' + (fc.rating || '') + '</div>' +
+      '<div style="color:#94a3b8;font-size:0.85rem">' + (fc.claim || fc.detail || '') + '</div>' +
+      (fc.url ? '<a href="' + fc.url + '" target="_blank">查看查核</a>' : '') +
+      '</div>'
+    ).join('');
+  } else {
+    fcSection.style.display = 'none';
+  }
+
+  // Related articles
+  const relSection = document.getElementById('related-section');
+  const relList = document.getElementById('related-list');
+  if (d.related_articles && d.related_articles.length) {
+    relSection.style.display = 'block';
+    relList.innerHTML = d.related_articles.map(a =>
+      '<div class="article-item">' +
+      '<a href="' + (a.url || '#') + '" target="_blank">' + (a.title || '') + '</a>' +
+      '<div class="article-source">' + (a.source || '') + '</div>' +
+      '</div>'
+    ).join('');
+  } else {
+    relSection.style.display = 'none';
+  }
+}
+</script>
+</body>
+</html>
